@@ -1,0 +1,24 @@
+{
+  "name": "Herock Notification Platform",
+  "short_name": "Herock",
+  "description": "Real-time Web Push & Analytics Platform built by HGT.",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://placehold.co/192x192/2563eb/ffffff.png?text=HGT",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://placehold.co/512x512/2563eb/ffffff.png?text=HGT",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
