@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Push Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Herock Push Notification --> <script src="https://henrykamsi.github.io/Herock-Notification/hgt.js" data-app-id="app_1784945303347_cm2u8y" data-user-id="oGmS1H8TqvbmAwKFP0rbUQq94Df2" defer></script>
+    <!-- Herock Push Notification --> <script src="https://henrykamsi.github.io/Herock-Notification/hgt.js" data-app-id="app_1784942492478_mnacx4" data-user-id="GbIfD9IOUth6vymdiPuKu88OrlB2" defer></script>
+</head>
+<body style="font-family:sans-serif;padding:20px;text-align:center;">
+    <h1>🔔 Push Test</h1>
+    <p>Allow notifications when prompted.</p>
+    <div id="status" style="padding:20px;background:#f0f0f0;border-radius:10px;margin:20px 0;">
+        ⏳ Loading...
+    </div>
+    <button onclick="check()" style="padding:15px 30px;background:#2563eb;color:white;border:none;border-radius:10px;font-size:16px;">
+        Check Status
+    </button>
+    
+    <script>
+    async function check() {
+        const status = document.getElementById('status');
+        status.innerHTML = '⏳ Checking...';
+        
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            const sub = await reg.pushManager.getSubscription();
+            
+            if (sub) {
+                const token = sub.endpoint.split('/').pop();
+                status.innerHTML = '✅ Subscribed!<br><small>Token: ' + token + '</small>';
+                
+                // Auto-save to Firestore
+                if (typeof firebase !== 'undefined') {
+                    const db = firebase.firestore();
+                    const appId = document.querySelector('[data-app-id]')?.getAttribute('data-app-id');
+                    const userId = document.querySelector('[data-user-id]')?.getAttribute('data-user-id');
+                    
+                    await db.collection('subscribers').add({
+                        appId: appId,
+                        userId: userId,
+                        fcmToken: token,
+                        active: true,
+                        subscribedAt: new Date().toISOString()
+                    });
+                    status.innerHTML += '<br>✅ Saved to Firestore!';
+                }
+            } else {
+                status.innerHTML = '❌ Not subscribed. Allow notifications!';
+            }
+        } catch(e) {
+            status.innerHTML = '❌ Error: ' + e.message;
+        }
+    }
+    
+    // Auto-check after 3 seconds
+    setTimeout(check, 3000);
+    </script>
+</body>
+</html>
