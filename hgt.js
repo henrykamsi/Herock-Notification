@@ -1,67 +1,117 @@
-// hgt.js - Herock Notification Client SDK
-(function () {
-  // 1. Get the App ID passed in the script tag
-  const scriptTag = document.currentScript || document.querySelector('script[src*="hgt.js"]');
-  const appId = scriptTag ? scriptTag.getAttribute('data-app-id') : null;
+// ============================================================
+// HEROCK NOTIFICATION - hgt.js
+// ============================================================
 
-  // 2. Load required Firebase SDKs dynamically
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
-
-  Promise.all([
-    loadScript('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js'),
-    loadScript('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js'),
-    loadScript('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js')
-  ]).then(() => {
-    // 3. Initialize Firebase
-    const firebaseConfig = {
-      apiKey: "AIzaSyAjdPgb9Py3u7c0JEd2svzkpuYnTMfnR2k",
-      authDomain: "herock-notification.firebaseapp.com",
-      projectId: "herock-notification",
-      messagingSenderId: "69308803783",
-      appId: "1:69308803783:web:9876fed0786a65063a6ce2"
-    };
-
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-
-    const messaging = firebase.messaging();
-    const db = firebase.firestore();
-
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          messaging.useServiceWorker(registration);
-          return Notification.requestPermission();
-        })
-        .then((permission) => {
-          if (permission === 'granted') return messaging.getToken();
-        })
-        .then((token) => {
-          if (token) {
-            const currentDomain = window.location.origin;
-            const ua = navigator.userAgent;
-            let browser = "Chrome";
-            if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
-            if (ua.includes("Firefox")) browser = "Firefox";
-            if (ua.includes("Edg")) browser = "Edge";
-
-            db.collection("subscribers").doc(token).set({
-              token: token,
-              appId: appId, // Links this subscriber to the specific user's app
-              domain: currentDomain,
-              browser: browser,
-              subscribedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-          }
-        })
-        .catch((err) => console.error("Herock SDK Error:", err));
+(function() {
+    'use strict';
+    
+    let appId = null;
+    let userId = null;
+    
+    // Get config from script tag
+    const scripts = document.getElementsByTagName('script');
+    for (let script of scripts) {
+        if (script.src && script.src.includes('hgt.js')) {
+            appId = script.getAttribute('data-app-id');
+            userId = script.getAttribute('data-user-id');
+            break;
+        }
     }
-  }).catch((err) => console.error("Failed to load Herock dependencies:", err));
+    
+    if (!appId || !userId) {
+        console.error('❌ Herock: Missing data-app-id or data-user-id');
+        return;
+    }
+    
+    console.log('✅ Herock: App ID:', appId);
+    console.log('✅ Herock: User ID:', userId);
+    
+    // Check for service worker support
+    if (!('serviceWorker' in navigator)) {
+        console.warn('⚠️ Service Workers not supported');
+        return;
+    }
+    
+    // Register service worker
+    navigator.serviceWorker.register('/sw.js')
+        .then(function(registration) {
+            console.log('✅ SW registered!');
+            
+            // Check permission
+            if (Notification.permission === 'granted') {
+                subscribe(registration);
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(function(permission) {
+                    if (permission === 'granted') {
+                        subscribe(registration);
+                    }
+                });
+            }
+        })
+        .catch(function(err) {
+            console.error('❌ SW registration failed:', err);
+        });
+    
+    function subscribe(registration) {
+        const vapidKey = 'BLXamEd4_CJnbp1OXVCL_YDJa7Sv_QxtZ2nHs98DIINAKkIO3ECkS2p79HANYSaJ7DI_Fc7pUkmRKSqCh1VtCJI';
+        
+        registration.pushManager.getSubscription()
+            .then(function(subscription) {
+                if (subscription) {
+                    console.log('✅ Already subscribed');
+                    saveToken(subscription);
+                    return;
+                }
+                
+                return registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(vapidKey)
+                })
+                .then(function(subscription) {
+                    console.log('✅ Subscribed!');
+                    saveToken(subscription);
+                })
+                .catch(function(err) {
+                    console.error('❌ Subscribe failed:', err);
+                });
+            });
+    }
+    
+    function saveToken(subscription) {
+        const token = subscription.endpoint.split('/').pop();
+        console.log('📋 Token:', token);
+        
+        // Try to save to Firestore
+        if (typeof firebase !== 'undefined' && firebase.firestore) {
+            try {
+                const db = firebase.firestore();
+                db.collection('subscribers').add({
+                    appId: appId,
+                    userId: userId,
+                    fcmToken: token,
+                    active: true,
+                    subscribedAt: new Date().toISOString()
+                }).then(function() {
+                    console.log('✅ Token saved to Firestore!');
+                }).catch(function(err) {
+                    console.error('❌ Save failed:', err);
+                });
+            } catch(e) {
+                console.error('❌ Firestore error:', e);
+            }
+        }
+    }
+    
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+    
+    console.log('🚀 Herock loaded!');
 })();
