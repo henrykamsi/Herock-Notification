@@ -1,48 +1,70 @@
-<!-- Add this directly before </head> on your test website or index.html -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
+// ============================================================
+// HEROCK SERVICE WORKER - sw.js
+// ============================================================
 
-<script>
-  // 1. Initialize Firebase on the target site
-  const firebaseConfig = {
-      apiKey: "AIzaSyAjdPgb9Py3u7c0JEd2svzkpuYnTMfnR2k",
-      authDomain: "herock-notification.firebaseapp.com",
-      projectId: "herock-notification",
-      messagingSenderId: "69308803783",
-      appId: "1:69308803783:web:9876fed0786a65063a6ce2"
-  };
+// Install event
+self.addEventListener('install', function(event) {
+    console.log('✅ SW: Installing...');
+    self.skipWaiting();
+});
 
-  if (!firebase.apps.length) {
-      firebase.initializeApp(firebaseConfig);
-  }
+// Activate event - take control immediately
+self.addEventListener('activate', function(event) {
+    console.log('✅ SW: Activating...');
+    event.waitUntil(self.clients.claim());
+});
 
-  const messaging = firebase.messaging();
+// ============================================================
+// PUSH NOTIFICATION RECEIVED
+// ============================================================
+self.addEventListener('push', function(event) {
+    console.log('📨 SW: Push received');
+    
+    let title = 'Herock Notification';
+    let body = 'You have a new notification';
+    let icon = 'https://henrykamsi.github.io/Herock-Notification/icon-192.png';
+    let url = '/';
+    
+    try {
+        if (event.data) {
+            const data = event.data.json();
+            title = data.title || title;
+            body = data.body || body;
+            icon = data.icon || icon;
+            url = data.url || url;
+        }
+    } catch(e) {
+        console.log('⚠️ Could not parse push data');
+    }
+    
+    event.waitUntil(
+        self.registration.showNotification(title, {
+            body: body,
+            icon: icon,
+            vibrate: [200, 100, 200],
+            data: { url: url }
+        })
+    );
+});
 
-  // 2. Request Notification Permission and register Service Worker
-  navigator.serviceWorker.register('/sw.js').then((registration) => {
-      messaging.useServiceWorker(registration);
+// ============================================================
+// NOTIFICATION CLICKED
+// ============================================================
+self.addEventListener('notificationclick', function(event) {
+    console.log('📨 SW: Notification clicked');
+    event.notification.close();
+    
+    const url = event.notification.data?.url || '/';
+    event.waitUntil(
+        clients.matchAll({ type: 'window' }).then(function(clientList) {
+            for (let client of clientList) {
+                if (client.url === url && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            return clients.openWindow(url);
+        })
+    );
+});
 
-      // Request user permission
-      Notification.requestPermission().then((permission) => {
-          if (permission === 'granted') {
-              console.log('Notification permission granted.');
-              
-              // Get FCM device registration token
-              messaging.getToken().then((currentToken) => {
-                  if (currentToken) {
-                      console.log('Device Push Token:', currentToken);
-                      // Send this token to your Herock Firestore database under tokens
-                  } else {
-                      console.log('No registration token available.');
-                  }
-              }).catch((err) => {
-                  console.error('An error occurred while retrieving token: ', err);
-              });
-          } else {
-              console.warn('Notification permission denied by user.');
-          }
-      });
-  }).catch((err) => {
-      console.error('Service Worker registration failed:', err);
-  });
-</script>
+console.log('🚀 Service Worker loaded!');
